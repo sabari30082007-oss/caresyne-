@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareSync Pro | Ultimate Command Center</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* CSS: Advanced Live Ops Styling */
+        :root {
+            --bg-base: #0a0f1c; 
+            --bg-panel: #111827;
+            --brand-accent: #0ea5e9;
+            --text-main: #f3f4f6;
+            --text-muted: #6b7280;
+            --neon-green: #10b981;
+            --neon-red: #ef4444;
+            --neon-orange: #f59e0b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background-color: var(--bg-base); color: var(--text-main); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-base); }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 10px; }
+
+        header { background-color: rgba(17, 24, 39, 0.9); padding: 15px 30px; border-bottom: 1px solid #1f2937; display: flex; justify-content: space-between; align-items: center; }
+        .logo-area h1 { font-size: 22px; display: flex; align-items: center; gap: 10px; }
+        .live-indicator { height: 10px; width: 10px; background-color: var(--neon-green); border-radius: 50%; animation: blink 1.5s infinite; box-shadow: 0 0 10px var(--neon-green); }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        .command-center { padding: 15px 30px; display: flex; gap: 15px; border-bottom: 1px solid #1f2937; background: var(--bg-panel); align-items: center; }
+        .search-bar, .filter-select { background: var(--bg-base); border: 1px solid #374151; color: var(--text-main); padding: 10px 15px; border-radius: 8px; outline: none; transition: 0.2s; }
+        .search-bar { flex: 1; }
+        .search-bar:focus { border-color: var(--brand-accent); box-shadow: 0 0 10px rgba(14, 165, 233, 0.2); }
+        
+        .btn-voice { background: var(--brand-accent); color: var(--text-main); border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+
+        .main-layout { display: grid; grid-template-columns: 320px 1fr 400px; flex: 1; overflow: hidden; position: relative; }
+
+        /* Left Panel: Charts & Feed */
+        .left-panel { background: var(--bg-panel); border-right: 1px solid #1f2937; display: flex; flex-direction: column; }
+        .chart-container { padding: 20px; border-bottom: 1px solid #1f2937; height: 220px; position: relative; }
+        .activity-feed { padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+        
+        .log-item { background: var(--bg-base); padding: 10px; border-radius: 6px; font-size: 11px; border-left: 3px solid #374151; animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(-10px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .log-critical { border-left-color: var(--neon-red); }
+        .log-update { border-left-color: var(--brand-accent); }
+        .log-doc { border-left-color: #a855f7; }
+        .log-time { color: var(--text-muted); font-size: 9px; display: block; margin-bottom: 2px; }
+
+        /* Center Grid */
+        .hospital-grid { padding: 20px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; align-content: start; }
+        .hospital-card { background: var(--bg-panel); border-radius: 12px; padding: 15px; border: 1px solid #1f2937; transition: 0.2s; display: flex; flex-direction: column; }
+        .hospital-card:hover { border-color: #374151; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        
+        .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+        .card-top-left { flex: 1; padding-right: 10px; overflow: hidden; }
+        .h-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+        .h-type { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
+        .h-dist { font-size: 11px; color: var(--brand-accent); background: rgba(14, 165, 233, 0.1); padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+        
+        .metrics-row { display: flex; gap: 8px; margin-bottom: 10px; }
+        .metric-box { flex: 1; background: var(--bg-base); padding: 10px 5px; border-radius: 8px; text-align: center; border: 1px solid #1f2937; transition: background 0.3s; }
+        .metric-val { font-size: 18px; font-weight: bold; }
+        .metric-label { font-size: 8.5px; color: var(--text-muted); text-transform: uppercase; margin-top: 2px; }
+        .metric-box.flash { background: rgba(239, 68, 68, 0.2); }
+        .metric-box.flash-green { background: rgba(16, 185, 129, 0.2); }
+        
+        .num-avail { color: var(--neon-green); }
+        .num-warn { color: var(--neon-orange); }
+        .num-full { color: var(--neon-red); }
+
+        /* Doctor Roster Styles */
+        .doctors-section { margin-bottom: 10px; border-top: 1px dashed #374151; padding-top: 10px; }
+        .section-title { font-size: 9px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
+        .doc-item { font-size: 11px; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+        .doc-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+        .doc-avail { background-color: var(--neon-green); box-shadow: 0 0 5px rgba(16, 185, 129, 0.5); }
+        .doc-busy { background-color: var(--neon-red); }
+        .doc-role { color: #9ca3af; font-size: 9.5px; font-style: italic; }
+
+        /* NEW: Blood Group Styles */
+        .blood-section { margin-bottom: 15px; flex: 1; }
+        .blood-grid { display: flex; flex-wrap: wrap; gap: 5px; }
+        .blood-badge { font-size: 9px; font-weight: bold; padding: 3px 6px; border-radius: 4px; background: var(--bg-base); border: 1px solid #1f2937; color: var(--text-main); display: flex; gap: 4px; align-items: center; }
+        .blood-badge span { color: var(--text-muted); font-weight: normal; font-size: 8px; }
+        .blood-badge.critical { border-color: var(--neon-red); color: var(--neon-red); background: rgba(239, 68, 68, 0.05); }
+        .blood-badge.warning { border-color: var(--neon-orange); color: var(--neon-orange); background: rgba(245, 158, 11, 0.05); }
+        .blood-badge.stable { border-color: var(--neon-green); color: var(--neon-green); background: rgba(16, 185, 129, 0.05); }
+
+        .btn-dispatch { background: var(--brand-accent); color: #fff; border: none; padding: 8px; border-radius: 6px; font-weight: 600; cursor: pointer; width: 100%; font-size: 11px; text-transform: uppercase; transition: 0.2s; margin-top: auto; }
+        .btn-dispatch:hover { background: #0284c7; }
+
+        /* Right Panel: Map */
+        #map { height: 100%; width: 100%; background: #050a14; z-index: 1; }
+        .leaflet-popup-content-wrapper { background: var(--bg-panel); color: var(--text-main); border: 1px solid #374151; border-radius: 8px; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+        .leaflet-popup-tip { background: var(--bg-panel); }
+        .leaflet-container a.leaflet-popup-close-button { color: var(--text-main); }
+
+        /* Dispatch Modal Overlay */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: none; justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: var(--bg-panel); border: 1px solid #374151; padding: 30px; border-radius: 12px; width: 400px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        .progress-bar { width: 100%; height: 8px; background: var(--bg-base); border-radius: 4px; margin: 20px 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--brand-accent); width: 0%; transition: width 0.5s; }
+        .modal-close { background: transparent; border: 1px solid #374151; color: var(--text-main); padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-top: 15px; display: none; }
+        .modal-close:hover { background: var(--bg-base); }
+
+        /* System Resource Ticker & Fleet Overlay */
+        .system-ticker { background: var(--bg-panel); border-bottom: 1px solid #1f2937; padding: 6px 30px; display: flex; overflow: hidden; font-size: 11px; white-space: nowrap; color: var(--brand-accent); letter-spacing: 0.5px; z-index: 10; }
+        .ticker-content { display: flex; gap: 40px; animation: tickerScroll 25s linear infinite; }
+        @keyframes tickerScroll { 0% { transform: translateX(100vw); } 100% { transform: translateX(-100%); } }
+        .ticker-item span { color: var(--text-main); font-weight: bold; }
+
+        .fleet-overlay { position: absolute; top: 15px; right: 15px; z-index: 400; background: rgba(10, 15, 28, 0.85); backdrop-filter: blur(8px); border: 1px solid #374151; padding: 15px; border-radius: 8px; width: 220px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); pointer-events: none; }
+        .fleet-item { font-size: 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #1f2937; }
+        .fleet-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .eta-urgent { color: var(--neon-red); font-weight: bold; animation: pulseText 1s infinite; background: rgba(239,68,68,0.1); padding: 2px 6px; border-radius: 4px;}
+        .eta-normal { color: var(--neon-green); font-weight: bold; background: rgba(16,185,129,0.1); padding: 2px 6px; border-radius: 4px; }
+        @keyframes pulseText { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-area">
+            <div class="live-indicator"></div>
+            <h1>CareSync <span style="font-weight: 300; color: var(--brand-accent);">TELEMETRY</span></h1>
+        </div>
+        <div style="font-size: 14px; color: var(--text-muted);" id="clock">00:00:00</div>
+    </header>
+
+    <div class="command-center">
+        <input type="text" class="search-bar" id="searchBar" placeholder="Search across 24 regional facilities...">
+        <button id="voiceBtn" class="btn-voice">🎤 Voice</button>
+        <select class="filter-select" id="bedFilter">
+            <option value="all">All Resources</option>
+            <option value="icu">Critical (ICU)</option>
+            <option value="trauma">Trauma / ER</option>
+        </select>
+        <select class="filter-select" id="typeFilter">
+            <option value="all">All Networks</option>
+            <option value="gov">Govt Network</option>
+            <option value="pvt">Private Network</option>
+        </select>
+    </div>
+
+    <div class="system-ticker" id="tickerBar">
+        <div class="ticker-content" id="tickerContent">
+            </div>
+    </div>
+
+    <div class="main-layout">
+        <div class="left-panel">
+            <div class="chart-container">
+                <canvas id="icuChart"></canvas>
+            </div>
+            <div class="activity-feed" id="logContainer">
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 5px; font-weight: bold; letter-spacing: 1px;">LIVE SYSTEM LOGS</div>
+            </div>
+        </div>
+
+        <div class="hospital-grid" id="gridContainer"></div>
+
+        <div id="map"></div>
+
+        <div class="fleet-overlay" id="fleetOverlay">
+            <h4 style="font-size: 10px; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 5px;">
+                <div style="width: 6px; height: 6px; background: var(--brand-accent); border-radius: 50%;"></div>
+                Active EMS Fleet
+            </h4>
+            <div id="fleetList"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="dispatchModal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 10px; color: var(--text-main);" id="modalTitle">Establishing Handshake...</h3>
+            <p style="font-size: 12px; color: var(--text-muted);" id="modalText">Connecting to hospital secure server.</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="modalProgress"></div>
+            </div>
+            <button class="modal-close" id="closeModalBtn" onclick="closeModal()">Close & Return to Watch</button>
+        </div>
+    </div>
+
+    <script>
+        // 1. Massive 24-Hospital Database
+        let hospitals = [
+            { id: 1, name: "JIPMER Regional", dist: "12.4 km", icu: 8, trauma: 4, type: "gov", lat: 11.9546, lng: 79.8058 },
+            { id: 2, name: "IGGGH White Town", dist: "5.1 km", icu: 2, trauma: 1, type: "gov", lat: 11.9338, lng: 79.8326 },
+            { id: 3, name: "Apollo Specialty", dist: "8.8 km", icu: 15, trauma: 6, type: "pvt", lat: 11.9400, lng: 79.8100 },
+            { id: 4, name: "PIMS Medical College", dist: "14.2 km", icu: 22, trauma: 10, type: "pvt", lat: 12.0250, lng: 79.8550 },
+            { id: 5, name: "MGMCRI Pillaiyarkuppam", dist: "16.5 km", icu: 18, trauma: 5, type: "pvt", lat: 11.8285, lng: 79.7742 },
+            { id: 6, name: "Rajiv Gandhi Women & Children", dist: "6.3 km", icu: 1, trauma: 0, type: "gov", lat: 11.9405, lng: 79.8150 },
+            { id: 7, name: "City Care Clinic", dist: "2.0 km", icu: 0, trauma: 2, type: "pvt", lat: 11.9350, lng: 79.8200 },
+            { id: 8, name: "East Coast Medical", dist: "18.2 km", icu: 5, trauma: 8, type: "pvt", lat: 11.9380, lng: 79.8000 },
+            { id: 9, name: "SVMC Ariyur", dist: "22.5 km", icu: 12, trauma: 5, type: "pvt", lat: 11.9100, lng: 79.6500 },
+            { id: 10, name: "BeWell Hospitals", dist: "4.5 km", icu: 3, trauma: 2, type: "pvt", lat: 11.9300, lng: 79.8250 },
+            { id: 11, name: "New Medical Centre", dist: "3.2 km", icu: 0, trauma: 1, type: "pvt", lat: 11.9450, lng: 79.8300 },
+            { id: 12, name: "Villupuram Govt Medical", dist: "38.1 km", icu: 4, trauma: 7, type: "gov", lat: 11.9400, lng: 79.4860 },
+            { id: 13, name: "Sri Manakula Vinayagar", dist: "20.8 km", icu: 14, trauma: 4, type: "pvt", lat: 11.9200, lng: 79.6400 },
+            { id: 14, name: "A.G. Padmavati Hospital", dist: "7.4 km", icu: 6, trauma: 3, type: "pvt", lat: 11.9500, lng: 79.8150 },
+            { id: 15, name: "AVMC (Aarupadai Veedu)", dist: "15.0 km", icu: 10, trauma: 3, type: "pvt", lat: 11.8000, lng: 79.7800 },
+            { id: 16, name: "Cuddalore Govt HQ", dist: "26.5 km", icu: 2, trauma: 5, type: "gov", lat: 11.7480, lng: 79.7714 },
+            { id: 17, name: "Tindivanam Govt Hospital", dist: "41.2 km", icu: 0, trauma: 4, type: "gov", lat: 12.2300, lng: 79.6500 },
+            { id: 18, name: "SLIMS Institute", dist: "19.3 km", icu: 8, trauma: 2, type: "pvt", lat: 11.9000, lng: 79.7500 },
+            { id: 19, name: "Cluny Hospital", dist: "6.8 km", icu: 4, trauma: 1, type: "pvt", lat: 11.9360, lng: 79.8310 },
+            { id: 20, name: "Rani Hospital", dist: "4.1 km", icu: 2, trauma: 0, type: "pvt", lat: 11.9420, lng: 79.8280 },
+            { id: 21, name: "Nallam Clinic", dist: "5.5 km", icu: 0, trauma: 1, type: "pvt", lat: 11.9390, lng: 79.8250 },
+            { id: 22, name: "VIMS General Hospital", dist: "11.7 km", icu: 6, trauma: 3, type: "pvt", lat: 11.9480, lng: 79.8180 },
+            { id: 23, name: "Puducherry Govt Maternity", dist: "5.9 km", icu: 4, trauma: 0, type: "gov", lat: 11.9350, lng: 79.8300 },
+            { id: 24, name: "Kauvery Hospital Cuddalore", dist: "28.0 km", icu: 16, trauma: 7, type: "pvt", lat: 11.7500, lng: 79.7600 }
+        ];
+
+        // NEW: Specific Blood Types Array
+        const bloodTypes = ["O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"];
+
+        // Generate Dynamic Data for Doctors AND Specific Blood Groups
+        const specialties = ["Cardiologist", "Neurologist", "Trauma Surgeon", "Anesthesiologist", "Pediatrician", "Orthopedic"];
+        const docFirst = ["Arun", "Priya", "Vikram", "Neha", "Rahul", "Anjali", "Suresh", "Karthik", "Ravi", "Divya"];
+        const docLast = ["Sharma", "Verma", "Reddy", "Iyer", "Nair", "Patil", "Deshmukh", "Menon"];
+
+        hospitals.forEach(h => {
+            // Generate Doctors
+            h.doctors = [];
+            let numDocs = Math.floor(Math.random() * 3) + 2; 
+            for(let i=0; i<numDocs; i++) {
+                let fName = docFirst[Math.floor(Math.random() * docFirst.length)];
+                let lName = docLast[Math.floor(Math.random() * docLast.length)];
+                h.doctors.push({
+                    id: `doc-${h.id}-${i}`,
+                    name: `Dr. ${fName} ${lName}`,
+                    role: specialties[Math.floor(Math.random() * specialties.length)],
+                    available: Math.random() > 0.3 
+                });
+            }
+
+            // Generate Detailed Blood Bank Inventory
+            h.bloodInventory = {};
+            h.totalBloodUnits = 0;
+            bloodTypes.forEach(type => {
+                // Bias O+ and A+ to be slightly higher, O- to be lower generally
+                let max = (type === 'O+' || type === 'A+') ? 15 : (type === 'O-' || type === 'AB-') ? 6 : 10;
+                let units = Math.floor(Math.random() * max);
+                h.bloodInventory[type] = units;
+                h.totalBloodUnits += units;
+            });
+        });
+
+        // 2. Map Initialization
+        const map = L.map('map').setView([11.9416, 79.8083], 11);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap & CartoDB'
+        }).addTo(map);
+
+        setTimeout(() => { map.invalidateSize(); }, 200);
+        let mapMarkers = {};
+
+        function initMapMarkers() {
+            hospitals.forEach(h => {
+                let color = h.icu > 4 ? '#10b981' : (h.icu > 0 ? '#f59e0b' : '#ef4444');
+                const icon = L.divIcon({
+                    className: 'custom-icon',
+                    html: `<div style="background-color:${color}; width:12px; height:12px; border-radius:50%; border:2px solid #fff; box-shadow: 0 0 10px ${color}; transition: background-color 0.3s;"></div>`,
+                    iconSize: [12, 12]
+                });
+
+                const marker = L.marker([h.lat, h.lng], {icon: icon}).addTo(map);
+                marker.bindPopup(`<strong style="color:var(--brand-accent);">${h.name}</strong><br>ICU Beds: ${h.icu}<br>Trauma: ${h.trauma}`);
+                mapMarkers[h.id] = marker;
+            });
+        }
+        initMapMarkers();
+
+        // 3. Chart.js Initialization
+        const ctx = document.getElementById('icuChart').getContext('2d');
+        function calculateTotalICU() { return hospitals.reduce((sum, h) => sum + h.icu, 0); }
+
+        let chartData = {
+            labels: ['-30s', '-25s', '-20s', '-15s', '-10s', '-5s', 'Now'],
+            datasets: [{
+                label: 'Total Regional ICU Beds',
+                data: [calculateTotalICU(), calculateTotalICU(), calculateTotalICU(), calculateTotalICU(), calculateTotalICU(), calculateTotalICU(), calculateTotalICU()],
+                borderColor: '#0ea5e9',
+                backgroundColor: 'rgba(14, 165, 233, 0.15)',
+                borderWidth: 2, fill: true, tension: 0.3, pointBackgroundColor: '#10b981', pointRadius: 3
+            }]
+        };
+        
+        const icuChart = new Chart(ctx, {
+            type: 'line', data: chartData,
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: false, grid: { color: '#1f2937' }, ticks: { color: '#94a3b8' } },
+                    x: { grid: { display: false }, ticks: { color: '#6b7280', font: {size: 9} } }
+                },
+                plugins: { legend: { labels: { color: '#f3f4f6', boxWidth: 12 } }, tooltip: { mode: 'index', intersect: false } }
+            }
+        });
+
+        // 4. UI Grid & Simulation
+        const gridContainer = document.getElementById('gridContainer');
+        const logContainer = document.getElementById('logContainer');
+
+        function renderGrid() {
+            const query = document.getElementById('searchBar').value.toLowerCase();
+            const bedFilter = document.getElementById('bedFilter').value;
+            const typeFilter = document.getElementById('typeFilter').value;
+
+            gridContainer.innerHTML = '';
+
+            hospitals.forEach(h => {
+                if (!h.name.toLowerCase().includes(query)) return;
+                if (typeFilter !== 'all' && h.type !== typeFilter) return;
+                if (bedFilter === 'icu' && h.icu === 0) return;
+                if (bedFilter === 'trauma' && h.trauma === 0) return;
+
+                const icuClass = h.icu > 4 ? 'num-avail' : (h.icu > 0 ? 'num-warn' : 'num-full');
+                const traumaClass = h.trauma > 2 ? 'num-avail' : (h.trauma > 0 ? 'num-warn' : 'num-full');
+                const totalBloodClass = h.totalBloodUnits > 30 ? 'num-avail' : (h.totalBloodUnits > 15 ? 'num-warn' : 'num-full');
+                const typeLabel = h.type === 'gov' ? 'Government' : 'Private';
+
+                // Generate Doctor HTML
+                let doctorsHtml = `<div class="doctors-section"><div class="section-title">Duty Roster</div>`;
+                h.doctors.forEach(doc => {
+                    let dotClass = doc.available ? 'doc-avail' : 'doc-busy';
+                    doctorsHtml += `
+                        <div class="doc-item">
+                            <div class="doc-dot ${dotClass}"></div>
+                            <span>${doc.name}</span>
+                            <span class="doc-role">${doc.role}</span>
+                        </div>
+                    `;
+                });
+                doctorsHtml += `</div>`;
+
+                // NEW: Generate Blood Group Grid HTML
+                let bloodHtml = `<div class="blood-section"><div class="section-title">Blood Inventory</div><div class="blood-grid">`;
+                bloodTypes.forEach(type => {
+                    let units = h.bloodInventory[type];
+                    // Thresholds for individual blood types
+                    let bClass = units >= 5 ? 'stable' : (units >= 2 ? 'warning' : 'critical');
+                    bloodHtml += `<div class="blood-badge ${bClass}">${type} <span>${units}U</span></div>`;
+                });
+                bloodHtml += `</div></div>`;
+
+                const html = `
+                    <div class="hospital-card" id="card-${h.id}">
+                        <div class="card-top">
+                            <div class="card-top-left">
+                                <div class="h-name" title="${h.name}">${h.name}</div>
+                                <div class="h-type">${typeLabel} Facility</div>
+                            </div>
+                            <div class="h-dist">🚗 ${h.dist}</div>
+                        </div>
+                        
+                        <div class="metrics-row">
+                            <div class="metric-box" id="box-icu-${h.id}">
+                                <div class="metric-val ${icuClass}">${h.icu}</div>
+                                <div class="metric-label">ICU Beds</div>
+                            </div>
+                            <div class="metric-box" id="box-trauma-${h.id}">
+                                <div class="metric-val ${traumaClass}">${h.trauma}</div>
+                                <div class="metric-label">Trauma / ER</div>
+                            </div>
+                            <div class="metric-box" id="box-blood-${h.id}">
+                                <div class="metric-val ${totalBloodClass}">${h.totalBloodUnits}</div>
+                                <div class="metric-label">Total Blood</div>
+                            </div>
+                        </div>
+                        
+                        ${doctorsHtml}
+                        ${bloodHtml}
+
+                        <button class="btn-dispatch" onclick="triggerDispatch('${h.name}')">Route & Relay Vitals</button>
+                    </div>
+                `;
+                gridContainer.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        // Notification Setup
+        if (Notification.permission !== "denied" && Notification.permission !== "granted") {
+            Notification.requestPermission();
+        }
+
+        function addLog(message, type = 'update') {
+            const timeStr = new Date().toLocaleTimeString([], { hour12: false });
+            logContainer.insertAdjacentHTML('afterbegin', `<div class="log-item log-${type}"><span class="log-time">${timeStr}</span>${message}</div>`);
+            if(logContainer.children.length > 12) logContainer.removeChild(logContainer.lastChild);
+
+            if (type === 'critical' && Notification.permission === "granted") {
+                new Notification("CareSync Alert", { body: message });
+            }
+        }
+
+        function updateSystem() {
+            const h = hospitals[Math.floor(Math.random() * hospitals.length)];
+            const eventType = Math.floor(Math.random() * 7); 
+
+            if (eventType === 1 && h.icu > 0) {
+                h.icu -= 1;
+                addLog(`🚑 Priority Admission at ${h.name}. ICU capacity reduced.`, 'critical');
+                const box = document.getElementById(`box-icu-${h.id}`);
+                if(box) { box.classList.add('flash'); setTimeout(() => box.classList.remove('flash'), 800); }
+
+            } else if (eventType === 2 && h.trauma > 0) {
+                h.trauma -= 1;
+                addLog(`🚨 ER Trauma patient locked at ${h.name}.`, 'critical');
+                const box = document.getElementById(`box-trauma-${h.id}`);
+                if(box) { box.classList.add('flash'); setTimeout(() => box.classList.remove('flash'), 800); }
+
+            } else if (eventType === 3) {
+                if(h.doctors && h.doctors.length > 0) {
+                    let randomDoc = h.doctors[Math.floor(Math.random() * h.doctors.length)];
+                    randomDoc.available = !randomDoc.available; 
+                    
+                    let statusTxt = randomDoc.available ? "is now Available" : "entered Surgery/Consult";
+                    addLog(`👨‍⚕️ ${randomDoc.name} (${randomDoc.role}) ${statusTxt} at ${h.name}.`, 'doc');
+                }
+            
+            // UPDATED EVENT: Massive Blood Usage targeting a specific blood type
+            } else if (eventType === 4 && h.totalBloodUnits > 0) {
+                // Find a blood type they actually have in stock
+                let availableTypes = bloodTypes.filter(t => h.bloodInventory[t] > 0);
+                if(availableTypes.length > 0) {
+                    let targetedType = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+                    let unitsUsed = Math.min(h.bloodInventory[targetedType], Math.floor(Math.random() * 3) + 1);
+                    
+                    h.bloodInventory[targetedType] -= unitsUsed;
+                    h.totalBloodUnits -= unitsUsed;
+                    
+                    addLog(`🩸 ER Trauma Transfusion at ${h.name}. Used ${unitsUsed} Units of ${targetedType}.`, 'critical');
+                    const box = document.getElementById(`box-blood-${h.id}`);
+                    if(box) { box.classList.add('flash'); setTimeout(() => box.classList.remove('flash'), 800); }
+                }
+            
+            // UPDATED EVENT: Blood Restock Delivery targeting specific groups
+            } else if (eventType === 5) {
+                let restockType1 = bloodTypes[Math.floor(Math.random() * bloodTypes.length)];
+                let restockType2 = bloodTypes[Math.floor(Math.random() * bloodTypes.length)];
+                
+                let units1 = Math.floor(Math.random() * 5) + 2;
+                let units2 = Math.floor(Math.random() * 5) + 2;
+
+                h.bloodInventory[restockType1] += units1;
+                h.bloodInventory[restockType2] += units2;
+                h.totalBloodUnits += (units1 + units2);
+
+                addLog(`🚛 Blood Bank Delivery at ${h.name}. Restocked ${restockType1} and ${restockType2}.`, 'update');
+                const box = document.getElementById(`box-blood-${h.id}`);
+                if(box) { box.classList.add('flash-green'); setTimeout(() => box.classList.remove('flash-green'), 800); }
+
+            } else if (eventType === 0) {
+                if(Math.random() > 0.5 && h.icu < 30) h.icu += 1;
+                addLog(`🤖 Auto-verification received from ${h.name}.`, 'update');
+            }
+
+            // Update Chart
+            chartData.datasets[0].data.push(calculateTotalICU());
+            chartData.datasets[0].data.shift(); 
+            icuChart.update();
+
+            // Update Map Markers
+            let color = h.icu > 4 ? '#10b981' : (h.icu > 0 ? '#f59e0b' : '#ef4444');
+            mapMarkers[h.id].setIcon(L.divIcon({
+                className: 'custom-icon',
+                html: `<div style="background-color:${color}; width:12px; height:12px; border-radius:50%; border:2px solid #fff; box-shadow: 0 0 10px ${color}; transition: 0.3s;"></div>`,
+                iconSize: [12, 12]
+            }));
+            mapMarkers[h.id].setPopupContent(`<strong style="color:var(--brand-accent);">${h.name}</strong><br>ICU Beds: ${h.icu}<br>Trauma: ${h.trauma}`);
+
+            // Re-render only if not typing
+            if (document.activeElement !== document.getElementById('searchBar')) {
+                renderGrid();
+            }
+        }
+
+        // 5. Dispatch Modal Logic
+        function triggerDispatch(hospitalName) {
+            const modal = document.getElementById('dispatchModal');
+            const title = document.getElementById('modalTitle');
+            const text = document.getElementById('modalText');
+            const progress = document.getElementById('modalProgress');
+            const btn = document.getElementById('closeModalBtn');
+            
+            modal.style.display = 'flex';
+            title.innerText = `Establishing Handshake with ${hospitalName}...`;
+            text.innerText = "Encrypting patient vitals payload.";
+            progress.style.width = '0%';
+            btn.style.display = 'none';
+
+            setTimeout(() => { progress.style.width = '40%'; text.innerText = "Transmitting ECG and telemetry..."; }, 800);
+            setTimeout(() => { progress.style.width = '80%'; text.innerText = "Awaiting ER Desk confirmation..."; }, 1800);
+            setTimeout(() => { 
+                progress.style.width = '100%'; 
+                title.innerText = "⚡ Dispatch Confirmed";
+                text.innerText = `ER team at ${hospitalName} is on standby.`;
+                title.style.color = 'var(--neon-green)';
+                btn.style.display = 'inline-block';
+                addLog(`✅ Dispatch finalized for ${hospitalName}. ER is scrubbed.`, 'update');
+            }, 3000);
+        }
+
+        function closeModal() {
+            document.getElementById('dispatchModal').style.display = 'none';
+            document.getElementById('modalTitle').style.color = 'var(--text-main)'; 
+        }
+
+        // 6. Voice Search API
+        const voiceBtn = document.getElementById('voiceBtn');
+        const searchInputBox = document.getElementById('searchBar');
+
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false; recognition.interimResults = false; recognition.lang = 'en-US';
+
+            voiceBtn.addEventListener('click', () => {
+                recognition.start();
+                voiceBtn.innerText = "🔴 Listening...";
+                voiceBtn.style.background = "var(--neon-red)";
+            });
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                searchInputBox.value = transcript.replace('.', ''); 
+                renderGrid(); 
+                
+                voiceBtn.innerText = "🎤 Voice";
+                voiceBtn.style.background = "var(--brand-accent)";
+                addLog(`🗣️ Voice command executed: "${transcript}"`, 'update');
+            };
+
+            recognition.onerror = () => {
+                voiceBtn.innerText = "🎤 Voice";
+                voiceBtn.style.background = "var(--brand-accent)";
+            };
+        } else {
+            voiceBtn.style.display = 'none';
+        }
+
+        // Ticker Logic
+        const tickerContent = document.getElementById('tickerContent');
+        function updateTicker() {
+            const bloodLevels = ["O- : Critical", "A+ : Stable", "B+ : Low", "AB+ : Stable", "O+ : Stable"];
+            const o2Tanks = Math.floor(Math.random() * 50) + 120;
+            const ventilators = Math.floor(Math.random() * 15) + 5;
+            
+            tickerContent.innerHTML = `
+                <div class="ticker-item">⚠️ <span style="color:var(--neon-orange);">REGIONAL ALERT:</span> High trauma volume reported in downtown sector.</div>
+                <div class="ticker-item">Total O2 Reserves: <span>${o2Tanks} Units</span></div>
+                <div class="ticker-item">Available Mobile Ventilators: <span>${ventilators}</span></div>
+                <div class="ticker-item">Regional Blood Status | <span>${bloodLevels.join(" | ")}</span></div>
+                <div class="ticker-item">System Uptime: <span>99.98%</span></div>
+                <div class="ticker-item">Total O2 Reserves: <span>${o2Tanks} Units</span></div>
+            `;
+        }
+        updateTicker();
+        setInterval(updateTicker, 25000);
+
+        // EMS Fleet Tracker Logic
+        const fleetList = document.getElementById('fleetList');
+        const ambIds = ["AMB-402 (ALS)", "AMB-911 (BLS)", "HELO-1 (Air)", "AMB-774 (ALS)", "AMB-205 (Neo)"];
+        
+        function updateFleet() {
+            fleetList.innerHTML = '';
+            let numActive = Math.floor(Math.random() * 3) + 2; 
+            
+            for(let i=0; i<numActive; i++) {
+                let unit = ambIds[Math.floor(Math.random() * ambIds.length)];
+                let eta = Math.floor(Math.random() * 18) + 1;
+                let etaClass = eta < 6 ? 'eta-urgent' : 'eta-normal';
+                let targetHosp = hospitals[Math.floor(Math.random() * hospitals.length)].name;
+                
+                fleetList.insertAdjacentHTML('beforeend', `
+                    <div class="fleet-item">
+                        <div>
+                            <span style="color:var(--text-main); font-weight:bold;">${unit}</span><br>
+                            <span style="color:var(--text-muted); font-size:9px;">Dst: ${targetHosp}</span>
+                        </div>
+                        <div class="${etaClass}">${eta} min</div>
+                    </div>
+                `);
+            }
+        }
+        updateFleet();
+        setInterval(updateFleet, 12000);
+
+        // 7. Event Listeners & Boot
+        document.getElementById('searchBar').addEventListener('input', renderGrid);
+        document.getElementById('bedFilter').addEventListener('change', renderGrid);
+        document.getElementById('typeFilter').addEventListener('change', renderGrid);
+        
+        setInterval(() => document.getElementById('clock').innerText = new Date().toLocaleTimeString(), 1000);
+        
+        renderGrid();
+        addLog("CareSync Telemetry Modules Online.", "update");
+        setInterval(updateSystem, 2500); 
+    </script>
+</body>
+</html>
